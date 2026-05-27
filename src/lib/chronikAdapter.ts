@@ -4,11 +4,11 @@ import type { BlockchainAdapter, TokenBalance } from "@xolosarmy/tonalli-core";
 type ChronikUtxo = {
   token?: {
     tokenId?: string;
-    amount?: string;
-    atoms?: string;
+    amount?: string | bigint;
+    atoms?: string | bigint;
   };
   slpToken?: {
-    amount?: string;
+    amount?: string | bigint;
   };
   slpMeta?: {
     tokenId?: string;
@@ -23,6 +23,7 @@ type ChronikUtxosResponse =
   | ChronikScriptUtxos[]
   | {
       scriptUtxos?: ChronikScriptUtxos[];
+      utxos?: ChronikUtxo[];
     };
 
 export class ChronikAdapter implements BlockchainAdapter {
@@ -36,35 +37,45 @@ export class ChronikAdapter implements BlockchainAdapter {
     address: string,
     tokenId: string
   ): Promise<TokenBalance | null> {
-    const result = (await this.chronik.address(address).utxos()) as ChronikUtxosResponse;
+    try {
+      const result = (await this.chronik.address(address).utxos()) as ChronikUtxosResponse;
 
-    const scriptUtxos = Array.isArray(result)
-      ? result
-      : result.scriptUtxos ?? [];
+      const scriptUtxos: ChronikScriptUtxos[] = Array.isArray(result)
+        ? result
+        : Array.isArray(result.scriptUtxos)
+          ? result.scriptUtxos
+          : Array.isArray(result.utxos)
+            ? [{ utxos: result.utxos }]
+            : [];
 
-    let totalAmount = 0n;
+      let totalAmount = 0n;
 
-    for (const scriptUtxo of scriptUtxos) {
-      for (const utxo of scriptUtxo.utxos) {
-        const foundTokenId = utxo.token?.tokenId ?? utxo.slpMeta?.tokenId;
-        const foundAmount =
-          utxo.token?.atoms ??
-          utxo.token?.amount ??
-          utxo.slpToken?.amount;
+      for (const scriptUtxo of scriptUtxos) {
+        for (const utxo of scriptUtxo.utxos) {
+          const foundTokenId = utxo.token?.tokenId ?? utxo.slpMeta?.tokenId;
+          const foundAmount =
+            utxo.token?.atoms ??
+            utxo.token?.amount ??
+            utxo.slpToken?.amount;
 
-        if (foundTokenId === tokenId && foundAmount) {
-          totalAmount += BigInt(foundAmount);
+          if (foundTokenId === tokenId && foundAmount !== undefined) {
+            totalAmount += BigInt(foundAmount);
+          }
         }
       }
-    }
 
-    if (totalAmount === 0n) {
+      if (totalAmount === 0n) {
+        return null;
+      }
+
+      return {
+        tokenId,
+        amount: totalAmount.toString()
+      };
+    } catch (error) {
+      console.error(`[ChronikAdapter] Error fetching token balance for ${address}`);
+      console.error(error);
       return null;
     }
-
-    return {
-      tokenId,
-      amount: totalAmount.toString()
-    };
   }
 }
