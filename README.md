@@ -71,3 +71,6 @@ export default defineConfig([
   },
 ])
 ```
+
+## Infrastructure
+This portal is powered by the public [@xolosarmy/tonalli-core](https://www.npmjs.com/package/@xolosarmy/tonalli-core) npm package for zero-dependency CashAddr validation and RMZ access-key detection on the eCash Mainnet.
